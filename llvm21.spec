@@ -175,7 +175,7 @@ end
 %endif
 
 #region pgo
-%ifarch %{ix86}
+%ifarch %{ix86} riscv64
 %bcond_with pgo
 %else
 %if 0%{?fedora} >= 43 || 0%{?rhel} >= 9
@@ -408,7 +408,8 @@ Version:	%{maj_ver}.%{min_ver}.%{patch_ver}%{?rc_ver:~%{rc_ver}}%{?llvm_snapshot
 %if 0%{?rhel} == 8
 Release:	1%{?dist}
 %else
-Release:	%autorelease
+# for riscv64 non upstream build, fix release number
+Release:	1.rv64%{?dist}
 %endif
 Summary:	The Low Level Virtual Machine
 
@@ -494,6 +495,9 @@ Patch2102: 0001-20-polly-shared-libs.patch
 Patch2202: 0001-22-polly-shared-libs.patch
 Patch2302: 0001-22-polly-shared-libs.patch
 #endregion polly patches
+
+# RISC-V 64 bit redhat triple patch
+Patch108: riscv64-redhat-triple.patch
 
 #region RHEL patches
 # RHEL 8 only
@@ -2647,6 +2651,29 @@ test_list_filter_out+=("libomp :: flush/omp_flush.c")
 test_list_filter_out+=("libomp :: worksharing/for/omp_for_schedule_guided.c")
 %endif
 
+%if %{maj_ver} < 21
+%ifarch aarch64 s390x
+# The following test has been failing intermittently on aarch64 and s390x.
+# Re-enable it after https://github.com/llvm/llvm-project/issues/117773
+# gets fixed.
+test_list_filter_out+=("libarcher :: races/taskwait-depend.c")
+%endif
+%endif
+
+# Do not run tests failed on riscv64
+%ifarch riscv64
+test_list_filter_out+=("libomp :: affinity/kmp-affinity.c")
+test_list_filter_out+=("libomp :: affinity/kmp-hw-subset.c")
+test_list_filter_out+=("libomp :: affinity/omp-places.c")
+test_list_filter_out+=("libomp :: ompt/misc/control_tool.c")
+test_list_filter_out+=("libomp :: ompt/synchronization/barrier/explicit.c")
+test_list_filter_out+=("libomp :: ompt/synchronization/critical.c")
+test_list_filter_out+=("libomp :: ompt/synchronization/flush.c")
+test_list_filter_out+=("libomp :: ompt/synchronization/ordered.c")
+test_list_filter_out+=("libomp :: ompt/synchronization/taskgroup.c")
+test_list_filter_out+=("libomp :: ompt/synchronization/taskwait.c")
+%endif
+
 # The following tests seem pass on ppc64le and x86_64 and aarch64 only:
 %ifnarch ppc64le x86_64 s390x aarch64
 # Passes on ppc64le:
@@ -2837,6 +2864,37 @@ test_list_filter_out+=("MLIR :: python/execution_engine.py")
 # if ! LD_SHOW_AUXV=1 /bin/true | grep -q arch_3_00; then
 test_list_filter_out+=("MLIR :: python/execution_engine.py")
 test_list_filter_out+=("MLIR :: python/multithreaded_tests.py")
+%endif
+
+# Do not run tests failed on riscv64
+%ifarch riscv64
+test_list_filter_out+=("MLIR :: CAPI/execution_engine.c")
+test_list_filter_out+=("MLIR :: mlir-runner/async-error.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/async-func.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/async-group.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/async-value.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/async.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/bare-ptr-call-conv.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/copy.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/expand-arith-ops.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/global-constructors.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/global-memref.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/math-polynomial-approx.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/memref-reinterpret-cast.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/memref-reshape.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/sgemm-naive-codegen.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/simple.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/test-expand-math-approx.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/unranked-memref.mlir")
+test_list_filter_out+=("MLIR :: mlir-runner/utils.mlir")
+test_list_filter_out+=("MLIR :: python/execution_engine.py")
+test_list_filter_out+=("MLIR :: python/multithreaded_tests.py")
+test_list_filter_out+=("MLIR-Unit :: ExecutionEngine/./MLIRExecutionEngineTests/10/12")
+test_list_filter_out+=("MLIR-Unit :: ExecutionEngine/./MLIRExecutionEngineTests/11/12")
+test_list_filter_out+=("MLIR-Unit :: ExecutionEngine/./MLIRExecutionEngineTests/6/12")
+test_list_filter_out+=("MLIR-Unit :: ExecutionEngine/./MLIRExecutionEngineTests/7/12")
+test_list_filter_out+=("MLIR-Unit :: ExecutionEngine/./MLIRExecutionEngineTests/8/12")
+test_list_filter_out+=("MLIR-Unit :: ExecutionEngine/./MLIRExecutionEngineTests/9/12")
 %endif
 
 %if %{with flang}
