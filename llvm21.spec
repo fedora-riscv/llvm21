@@ -318,6 +318,12 @@ end
 
 %global build_install_prefix %{buildroot}%{install_prefix}
 
+%if %{with compat_build}
+%global install_pythondir %{install_prefix}/lib/python%{python3_version}/site-packages
+%else
+%global install_pythondir %{python3_sitelib}/
+%endif
+
 # Lower memory usage of dwz on s390x
 %global _dwz_low_mem_die_limit_s390x 1
 %global _dwz_max_die_limit_s390x 1000000
@@ -409,7 +415,7 @@ Version:	%{maj_ver}.%{min_ver}.%{patch_ver}%{?rc_ver:~%{rc_ver}}%{?llvm_snapshot
 Release:	1%{?dist}
 %else
 # for riscv64 non upstream build, fix release number
-Release:	1.rv64%{?dist}
+Release:	3.rv64%{?dist}
 %endif
 Summary:	The Low Level Virtual Machine
 
@@ -934,20 +940,17 @@ Requires:	python%{python3_pkgversion}
 %description -n git-clang-format%{pkg_suffix}
 clang-format integration for git.
 
-%if %{without compat_build}
-%package -n python%{python3_pkgversion}-clang
+%package -n python%{python3_pkgversion}-%{pkg_name_clang}
 Summary:       Python3 bindings for clang
 Requires:      %{pkg_name_clang}-devel%{?_isa} = %{version}-%{release}
-Requires:      python%{python3_pkgversion}
+Requires:      python(abi) = %{python3_version}
+Provides:      python%{python3_pkgversion}-clang(major) = %{maj_ver}
 %if 0%{?rhel} == 8
 # Became python3.12-clang in LLVM 19
 Obsoletes: python3-clang < 18.9
 %endif
-%description -n python%{python3_pkgversion}-clang
+%description -n python%{python3_pkgversion}-%{pkg_name_clang}
 Python3 bindings for clang.
-
-
-%endif
 
 #endregion CLANG packages
 
@@ -1862,12 +1865,14 @@ fi
   -DLLVM_VP_COUNTERS_PER_SITE=8
 
 %if %{defined host_clang_maj_ver}
-%global cmake_config_args_instrumented %{cmake_config_args_instrumented} \\\
-  -DLLVM_PROFDATA=%{_bindir}/llvm-profdata-%{host_clang_maj_ver}
+%global profdata %{_bindir}/llvm-profdata-%{host_clang_maj_ver}
+%global cxxfilt %{_bindir}/llvm-cxxfilt-%{host_clang_maj_ver}
 %else
-%global cmake_config_args_instrumented %{cmake_config_args_instrumented} \\\
-  -DLLVM_PROFDATA=%{_bindir}/llvm-profdata
+%global profdata %{_bindir}/llvm-profdata
+%global cxxfilt %{_bindir}/llvm-cxxfilt
 %endif
+%global cmake_config_args_instrumented %{cmake_config_args_instrumented} \\\
+  -DLLVM_PROFDATA=%{profdata}
 
 # TODO(kkleine): Should we see warnings like:
 # "function control flow change detected (hash mismatch)"
@@ -1886,7 +1891,7 @@ fi
 %cmake_build --target generate-profdata
 
 # Show top 10 functions in the profile
-llvm-profdata show --topn=10 %{builddir_instrumented}/tools/clang/utils/perf-training/clang.profdata | llvm-cxxfilt
+%{profdata} show --topn=10 %{builddir_instrumented}/tools/clang/utils/perf-training/clang.profdata | %{cxxfilt}
 
 cp %{builddir_instrumented}/tools/clang/utils/perf-training/clang.profdata $RPM_BUILD_DIR/result.profdata
 
@@ -2137,15 +2142,6 @@ sed -i -e "s|@@CLANG_MAJOR_VERSION@@|%{maj_ver}|" \
        -e "s|@@CLANG_PATCH_VERSION@@|%{patch_ver}|" \
        %{buildroot}%{_rpmmacrodir}/macros.%{pkg_name_clang}
 
-# install clang python bindings
-mkdir -p %{buildroot}%{python3_sitelib}/clang/
-# If we don't default to true here, we'll see this error:
-# install: omitting directory 'bindings/python/clang/__pycache__'
-# NOTE: this only happens if we include the gdb plugin of libomp.
-# Remove the plugin with command and we're good: rm -rf %{buildroot}/%{_datarootdir}/gdb
-install -p -m644 clang/bindings/python/clang/* %{buildroot}%{python3_sitelib}/clang/
-%py_byte_compile %{__python3} %{buildroot}%{python3_sitelib}/clang
-
 # install scanbuild-py to python sitelib.
 mv %{buildroot}%{install_prefix}/lib/{libear,libscanbuild} %{buildroot}%{python3_sitelib}
 # Cannot use {libear,libscanbuild} style expansion in py_byte_compile.
@@ -2168,6 +2164,15 @@ rm %{buildroot}%{install_bindir}/scan-build-py
 rm -Rf %{buildroot}%{install_datadir}/clang/*.el
 
 %endif
+
+# install clang python bindings
+mkdir -p %{buildroot}%{install_pythondir}/clang/
+# If we don't default to true here, we'll see this error:
+# install: omitting directory 'bindings/python/clang/__pycache__'
+# NOTE: this only happens if we include the gdb plugin of libomp.
+# Remove the plugin with command and we're good: rm -rf %{buildroot}/%{_datarootdir}/gdb
+install -p -m644 clang/bindings/python/clang/* %{buildroot}%{install_pythondir}/clang/
+%py_byte_compile %{__python3} %{buildroot}%{install_pythondir}/clang/
 
 # Create manpage symlink for clang++
 ln -s clang-%{maj_ver}.1 %{buildroot}%{install_mandir}/man1/clang++.1
@@ -3510,12 +3515,9 @@ fi
 %license clang/LICENSE.TXT
 %expand_bins git-clang-format
 
-%if %{without compat_build}
-%files -n python%{python3_pkgversion}-clang
+%files -n python%{python3_pkgversion}-%{pkg_name_clang}
 %license clang/LICENSE.TXT
-%{python3_sitelib}/clang/
-%endif
-
+%{install_pythondir}/clang/
 #endregion CLANG files
 
 #region COMPILER-RT files
